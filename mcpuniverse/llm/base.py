@@ -219,7 +219,7 @@ class BaseLLM(ExportConfigMixin, metaclass=ComponentABCMeta):
         """
         retries = kwargs.pop("retries", 3)
         retry_delay = kwargs.pop("retry_delay", 5)
-        timeout = kwargs.pop("timeout", 60)
+        timeout = kwargs.pop("timeout", 900)  # 15 minutes
 
         for attempt in range(retries + 1):
             try:
