@@ -149,10 +149,39 @@ class ReAct(BaseAgent):
                 tracer=tracer,
                 callbacks=callbacks
             )
+            
+            # Debug logging for response analysis
+            self._logger.debug("[Iter %d] Raw LLM response type: %s", iter_num + 1, type(response).__name__)
+            self._logger.debug("[Iter %d] Raw LLM response is None: %s", iter_num + 1, response is None)
+            if response is None:
+                self._logger.error("[Iter %d] LLM returned None response!", iter_num + 1)
+                # Add to tracer for debugging
+                with tracer.sprout() as t:
+                    t.add({
+                        "type": "debug",
+                        "class": self.__class__.__name__,
+                        "iteration": iter_num + 1,
+                        "event": "llm_returned_none",
+                        "raw_response": None,
+                        "error": "LLM returned None - possible timeout or empty response"
+                    })
+                self._add_history(
+                    history_type="error",
+                    message="LLM returned empty response. Retrying..."
+                )
+                continue
+            
+            self._logger.debug("[Iter %d] Raw response length: %d", iter_num + 1, len(response) if response else 0)
+            self._logger.debug("[Iter %d] Raw response (first 500 chars): %s", iter_num + 1, repr(response[:500] if response else ''))
+            
             try:
                 response = response.strip().strip('`').strip()
                 if response.startswith("json"):
                     response = response[4:].strip()
+                
+                self._logger.debug("[Iter %d] Cleaned response length: %d", iter_num + 1, len(response))
+                self._logger.debug("[Iter %d] Cleaned response (first 500 chars): %s", iter_num + 1, repr(response[:500]))
+                
                 parsed_response = json.loads(response)
                 if "thought" not in parsed_response:
                     raise ValueError("Invalid response format")
@@ -256,7 +285,28 @@ class ReAct(BaseAgent):
                     raise ValueError("Invalid response format")
 
             except json.JSONDecodeError as e:
-                self._logger.error("Failed to parse response: %s", str(e))
+                self._logger.error("[Iter %d] JSON decode error: %s", iter_num + 1, str(e))
+                self._logger.error("[Iter %d] Error position: line %d, column %d", iter_num + 1, e.lineno, e.colno)
+                self._logger.error("[Iter %d] Response length: %d", iter_num + 1, len(response) if response else 0)
+                self._logger.error("[Iter %d] Response (first 1000 chars): %s", iter_num + 1, repr(response[:1000] if response else ''))
+                self._logger.error("[Iter %d] Response (last 500 chars): %s", iter_num + 1, repr(response[-500:] if response and len(response) > 500 else response))
+                
+                # Add detailed error to tracer for post-mortem analysis
+                with tracer.sprout() as t:
+                    t.add({
+                        "type": "debug",
+                        "class": self.__class__.__name__,
+                        "iteration": iter_num + 1,
+                        "event": "json_decode_error",
+                        "error_message": str(e),
+                        "error_line": e.lineno,
+                        "error_column": e.colno,
+                        "raw_response_length": len(response) if response else 0,
+                        "raw_response_first_1000": response[:1000] if response else None,
+                        "raw_response_last_500": response[-500:] if response and len(response) > 500 else response,
+                        "raw_response_is_empty": not response or len(response.strip()) == 0
+                    })
+                
                 self._add_history(
                     history_type="error",
                     message="I encountered an error in parsing LLM response. Let me try again."

@@ -221,9 +221,12 @@ class BaseLLM(ExportConfigMixin, metaclass=ComponentABCMeta):
         retry_delay = kwargs.pop("retry_delay", 5)
         timeout = kwargs.pop("timeout", 900)  # 15 minutes
 
+        tracer = tracer if tracer else Tracer()
+        
         for attempt in range(retries + 1):
             try:
-                return await asyncio.wait_for(
+                self.logger.debug("[Attempt %d/%d] Starting LLM call with timeout=%ds", attempt + 1, retries + 1, timeout)
+                result = await asyncio.wait_for(
                     self._call_generate(
                         messages=messages,
                         tracer=tracer,
@@ -232,6 +235,38 @@ class BaseLLM(ExportConfigMixin, metaclass=ComponentABCMeta):
                     ),
                     timeout=timeout
                 )
+                
+                # Debug logging for response analysis
+                self.logger.debug("[Attempt %d/%d] LLM call completed", attempt + 1, retries + 1)
+                self.logger.debug("[Attempt %d/%d] Result type: %s", attempt + 1, retries + 1, type(result).__name__)
+                self.logger.debug("[Attempt %d/%d] Result is None: %s", attempt + 1, retries + 1, result is None)
+                
+                if result is None:
+                    self.logger.error("[Attempt %d/%d] LLM returned None! This will cause JSON decode errors.", attempt + 1, retries + 1)
+                    # Add to tracer for debugging
+                    with tracer.sprout() as t:
+                        t.add({
+                            "type": "debug",
+                            "class": self.__class__.__name__,
+                            "attempt": attempt + 1,
+                            "event": "llm_returned_none",
+                            "error": "LLM _generate returned None - check model implementation"
+                        })
+                elif isinstance(result, str):
+                    self.logger.debug("[Attempt %d/%d] Result length: %d", attempt + 1, retries + 1, len(result))
+                    self.logger.debug("[Attempt %d/%d] Result (first 200 chars): %s", attempt + 1, retries + 1, repr(result[:200]))
+                    if len(result.strip()) == 0:
+                        self.logger.warning("[Attempt %d/%d] LLM returned empty string!", attempt + 1, retries + 1)
+                        with tracer.sprout() as t:
+                            t.add({
+                                "type": "debug",
+                                "class": self.__class__.__name__,
+                                "attempt": attempt + 1,
+                                "event": "llm_returned_empty_string",
+                                "error": "LLM returned empty or whitespace-only string"
+                            })
+                
+                return result
             except asyncio.TimeoutError as e:
                 if attempt < retries:
                     self.logger.warning("Timeout on attempt %d/%d. Retrying...", attempt + 1, retries + 1)

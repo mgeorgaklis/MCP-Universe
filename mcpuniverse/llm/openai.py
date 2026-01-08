@@ -108,6 +108,9 @@ class OpenAIModel(BaseLLM):
                     kwargs["reasoning_effort"] = "high"
                     self.config.model_name = "gpt-5"
 
+                self.logger.debug("[OpenAI Attempt %d/%d] Making API call to model %s", 
+                                 attempt + 1, max_retries + 1, self.config.model_name)
+
                 if response_format is None:
                     chat = client.chat.completions.create(
                         messages=messages,
@@ -124,9 +127,25 @@ class OpenAIModel(BaseLLM):
                     # If tools are provided, return the entire response object
                     # so the caller can handle both content and tool_calls
                     if 'tools' in kwargs:
+                        self.logger.debug("[OpenAI] Returning tool response object")
                         return chat
                     # For backward compatibility, return just content when no tools
-                    return chat.choices[0].message.content
+                    content = chat.choices[0].message.content
+                    self.logger.debug("[OpenAI Attempt %d/%d] Response content type: %s", 
+                                     attempt + 1, max_retries + 1, type(content).__name__)
+                    self.logger.debug("[OpenAI Attempt %d/%d] Response is None: %s", 
+                                     attempt + 1, max_retries + 1, content is None)
+                    if content is not None:
+                        self.logger.debug("[OpenAI Attempt %d/%d] Response length: %d", 
+                                         attempt + 1, max_retries + 1, len(content))
+                        self.logger.debug("[OpenAI Attempt %d/%d] Response (first 300 chars): %s", 
+                                         attempt + 1, max_retries + 1, repr(content[:300]))
+                    else:
+                        self.logger.error("[OpenAI Attempt %d/%d] API returned None content!", 
+                                         attempt + 1, max_retries + 1)
+                        self.logger.error("[OpenAI Attempt %d/%d] Full chat response: %s", 
+                                         attempt + 1, max_retries + 1, chat)
+                    return content
 
                 chat = client.beta.chat.completions.parse(
                     messages=messages,
@@ -146,23 +165,28 @@ class OpenAIModel(BaseLLM):
                 if 'tools' in kwargs:
                     return chat
                 # For backward compatibility, return just parsed content when no tools
-                return chat.choices[0].message.parsed
+                parsed = chat.choices[0].message.parsed
+                self.logger.debug("[OpenAI Attempt %d/%d] Parsed response: %s", 
+                                 attempt + 1, max_retries + 1, type(parsed).__name__)
+                return parsed
 
             except (RateLimitError, APIError, APITimeoutError) as e:
                 if attempt == max_retries:
                     # Last attempt failed, return None instead of raising
-                    logging.warning("All %d attempts failed. Last error: %s", max_retries + 1, e)
+                    self.logger.error("[OpenAI] All %d attempts failed. Last error: %s", max_retries + 1, e)
+                    self.logger.error("[OpenAI] Returning None - this will cause JSON decode errors downstream!")
                     return None
 
                 # Calculate delay with exponential backoff
                 delay = base_delay * (2 ** attempt)
-                logging.info("Attempt %d failed with error: %s. Retrying in %.1f seconds...",
-                           attempt + 1, e, delay)
+                self.logger.warning("[OpenAI Attempt %d/%d] Failed with error: %s. Retrying in %.1f seconds...",
+                           attempt + 1, max_retries + 1, e, delay)
                 time.sleep(delay)
 
             except Exception as e:
                 # For non-retryable errors, return None instead of raising
-                logging.error("Non-retryable error occurred: %s", e)
+                self.logger.error("[OpenAI] Non-retryable error occurred: %s", e)
+                self.logger.error("[OpenAI] Returning None - this will cause JSON decode errors downstream!")
                 return None
 
     def set_context(self, context: Context):
