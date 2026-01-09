@@ -265,6 +265,8 @@
       "args": [
         "@playwright/mcp@latest",
         "--headless",
+        "--no-sandbox",
+        "--ignore-https-errors",
         "--isolated"
       ]
     }
