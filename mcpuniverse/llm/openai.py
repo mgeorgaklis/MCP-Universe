@@ -93,6 +93,13 @@ class OpenAIModel(BaseLLM):
         """
         max_retries = kwargs.get("max_retries", 5)
         base_delay = kwargs.get("base_delay", 10.0)
+        env_timeout = os.getenv("OPENAI_API_TIMEOUT_SECONDS")
+        if env_timeout is not None:
+            timeout = int(env_timeout)
+            self.logger.info("[OpenAI] Using OPENAI_API_TIMEOUT_SECONDS=%d from environment", timeout)
+        else:
+            timeout = int(kwargs.get("timeout", 60))
+            self.logger.debug("[OpenAI] Using default timeout=%d", timeout)
 
         for attempt in range(max_retries + 1):
             try:
@@ -116,7 +123,7 @@ class OpenAIModel(BaseLLM):
                         messages=messages,
                         model=self.config.model_name,
                         temperature=self.config.temperature,
-                        timeout=int(kwargs.get("timeout", 60)),
+                        timeout=timeout,
                         top_p=self.config.top_p,
                         frequency_penalty=self.config.frequency_penalty,
                         presence_penalty=self.config.presence_penalty,
@@ -151,7 +158,7 @@ class OpenAIModel(BaseLLM):
                     messages=messages,
                     model=self.config.model_name,
                     temperature=self.config.temperature,
-                    timeout=int(kwargs.get("timeout", 60)),
+                    timeout=timeout,
                     top_p=self.config.top_p,
                     frequency_penalty=self.config.frequency_penalty,
                     presence_penalty=self.config.presence_penalty,

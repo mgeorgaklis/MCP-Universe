@@ -235,7 +235,7 @@ class BenchmarkRunner(metaclass=AutodocABCMeta):
                         type=MessageType.LOG,
                         data=f"Running task: {task_path}"
                     ))
-                    self._logger.info("Running task: %s", task_path)
+                    self._logger.info("Running task: %s (%d/%d)", task_path, idx + 1, len(tasks_to_run))
                     if not os.path.exists(task_path):
                         task_filepath = os.path.join(self._default_folder, task_path)
                     else:
