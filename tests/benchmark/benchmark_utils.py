@@ -39,8 +39,8 @@ def get_config_path_with_agent_override(original_config: str, agent_type: str | 
         if doc.get("kind", "").lower() == "agent" and "spec" in doc:
             original_type = doc["spec"].get("type", "unknown")
             doc["spec"]["type"] = agent_type
-            doc["apec"]["name"] = agent_type + "-agent"
-            print(f"Overriding agent '{doc['spec'].get('name', 'unknown')}' type from '{original_type}' to '{agent_type}'")
+            doc["spec"]["name"] = agent_type + "-agent"
+            print(f"Overriding agent '{doc['spec'].get('type', 'unknown')}' type from '{original_type}' to '{agent_type}'")
     
     # Write to a temp file
     temp_file = tempfile.NamedTemporaryFile(
