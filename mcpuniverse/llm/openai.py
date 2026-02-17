@@ -93,7 +93,7 @@ class OpenAIModel(BaseLLM):
                 response_format is provided, or None if parsing structured output fails.
                 Returns None if all retry attempts fail or non-retryable errors occur.
         """
-        max_retries = kwargs.get("max_retries", 480)
+        max_retries = kwargs.get("max_retries", 60)
         base_delay = kwargs.get("base_delay", 60.0)
         env_timeout = os.getenv("OPENAI_API_TIMEOUT_SECONDS")
         if env_timeout is not None:
